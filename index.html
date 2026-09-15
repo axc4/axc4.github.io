@@ -1,11 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>axc4's website</title>
+  <title>My IP</title>
 </head>
 <body>
-    <h1>Your IP:<?php echo $_SERVER['REMOTE_ADDR']; ?></h1>
+  <h1>Your IP address is:</h1>
+  <p id="ip">Loading...</p>
+
+  <script>
+    fetch("https://api.ipify.org?format=json")
+      .then(response => response.json())
+      .then(data => {
+        document.getElementById("ip").textContent = data.ip;
+      })
+      .catch(() => {
+        document.getElementById("ip").textContent = "Could not find IP";
+      });
+  </script>
 </body>
 </html>
