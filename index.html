@@ -1,21 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>My IP</title>
+  <title>total anarchy</title>
 </head>
 <body>
-  <h1>Your IP address is:</h1>
-  <p id="ip">Loading...</p>
-
-  <script>
-    fetch("https://api.ipify.org?format=json")
-      .then(response => response.json())
-      .then(data => {
-        document.getElementById("ip").textContent = data.ip;
-      })
-      .catch(() => {
-        document.getElementById("ip").textContent = "Could not find IP";
-      });
-  </script>
+  <h1>Welcome.</h1>
 </body>
 </html>
