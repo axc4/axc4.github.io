@@ -2,8 +2,74 @@
 <html>
 <head>
   <title>total anarchy</title>
+  <style>
+    
+  </style>
 </head>
 <body>
-  <h1>Welcome.</h1>
+  <h1>change anything, no rules, TOTAL FREEDOM!!11!</h1>
+  <div id="canvas" contenteditable="true">
+    this is the div u can change :v
+  </div>
+
+  <script type="module">
+    import { initializeApp } from
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      onSnapshot
+    } from
+      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+
+    apiKey: "AIzaSyCsEMjq8Z1tDgwwyfLJ1S0julbcDtHgjSY",
+
+    authDomain: "total-anarchy.firebaseapp.com",
+
+    projectId: "total-anarchy",
+
+    storageBucket: "total-anarchy.firebasestorage.app",
+
+    messagingSenderId: "774274833340",
+
+    appId: "1:774274833340:web:a8782941bd5ba9b334a9b9",
+
+    measurementId: "G-6JC8ZGEPJN"
+
+  };
+
+
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const page = doc(db, "public", "main");
+
+    const canvas = document.querySelector("#canvas");
+    let updatingFromServer = false;
+
+    // Receive changes made by anyone
+    onSnapshot(page, snapshot => {
+      if (!snapshot.exists() || document.activeElement === canvas) return;
+
+      updatingFromServer = true;
+      canvas.innerHTML = snapshot.data().html || "";
+      updatingFromServer = false;
+    });
+
+    // Save this user's changes for everyone
+    canvas.addEventListener("input", async () => {
+      if (updatingFromServer) return;
+
+      await setDoc(page, {
+        html: canvas.innerHTML,
+        updatedAt: Date.now()
+      });
+    });
+  </script>
+
 </body>
 </html>
