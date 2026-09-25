@@ -1,16 +1,27 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <title>total anarchy</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>cyber Anarchy</title>
+
   <style>
-    
+    #shared {
+      outline: none;
+    }
   </style>
 </head>
+
 <body>
-  <h1>change anything, no rules, TOTAL FREEDOM!!11!</h1>
-  <div id="canvas" contenteditable="true">
-    this is the div u can change :v
+  <h1>no rules, total freedom!!11!</h1>
+
+  <div id="shared" contenteditable="true">
+      change this
   </div>
+
+  <button id="saveButton">Save for everyone</button>
+  <span id="status"></span>
 
   <script type="module">
     import { initializeApp } from
@@ -24,52 +35,87 @@
     } from
       "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
+
+    // Replace these values with your Firebase configuration.
     const firebaseConfig = {
 
-    apiKey: "AIzaSyCsEMjq8Z1tDgwwyfLJ1S0julbcDtHgjSY",
+      apiKey: "AIzaSyCsEMjq8Z1tDgwwyfLJ1S0julbcDtHgjSY",
 
-    authDomain: "total-anarchy.firebaseapp.com",
+      authDomain: "total-anarchy.firebaseapp.com",
 
-    projectId: "total-anarchy",
+      projectId: "total-anarchy",
 
-    storageBucket: "total-anarchy.firebasestorage.app",
+      storageBucket: "total-anarchy.firebasestorage.app",
 
-    messagingSenderId: "774274833340",
+      messagingSenderId: "774274833340",
 
-    appId: "1:774274833340:web:a8782941bd5ba9b334a9b9",
+      appId: "1:774274833340:web:a8782941bd5ba9b334a9b9",
 
-    measurementId: "G-6JC8ZGEPJN"
+      measurementId: "G-6JC8ZGEPJN"
 
-  };
+    };
 
 
-
+    // Start Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const page = doc(db, "public", "main");
 
-    const canvas = document.querySelector("#canvas");
-    let updatingFromServer = false;
 
-    // Receive changes made by anyone
-    onSnapshot(page, snapshot => {
-      if (!snapshot.exists() || document.activeElement === canvas) return;
+    // This is the shared database document.
+    // Every visitor edits this same document.
+    const sharedPage = doc(db, "experiment", "main");
 
-      updatingFromServer = true;
-      canvas.innerHTML = snapshot.data().html || "";
-      updatingFromServer = false;
-    });
 
-    // Save this user's changes for everyone
-    canvas.addEventListener("input", async () => {
-      if (updatingFromServer) return;
+    const editor = document.querySelector("#shared");
+    const saveButton = document.querySelector("#saveButton");
+    const status = document.querySelector("#status");
 
-      await setDoc(page, {
-        html: canvas.innerHTML,
-        updatedAt: Date.now()
-      });
+
+    // Load updates made by other people.
+    onSnapshot(
+      sharedPage,
+
+      snapshot => {
+        if (!snapshot.exists()) {
+          status.textContent = "No saved version yet.";
+          return;
+        }
+
+        // Do not replace the text while this person is typing.
+        if (document.activeElement === editor) {
+          return;
+        }
+
+        editor.innerHTML = snapshot.data().html || "";
+        status.textContent = "Loaded shared version.";
+      },
+
+      error => {
+        console.error(error);
+        status.textContent = "Could not connect to database.";
+      }
+    );
+
+
+    // Save only when the button is clicked.
+    saveButton.addEventListener("click", async () => {
+      try {
+        saveButton.disabled = true;
+        status.textContent = "Saving...";
+
+        await setDoc(sharedPage, {
+          html: editor.innerHTML,
+          changedAt: Date.now()
+        });
+
+        status.textContent = "Saved for everyone.";
+      } catch (error) {
+        console.error(error);
+        status.textContent = "Save failed.";
+      } finally {
+        saveButton.disabled = false;
+      }
     });
   </script>
-
 </body>
 </html>
