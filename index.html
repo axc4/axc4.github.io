@@ -1,117 +1,103 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>cyber Anarchy</title>
-
-  <style>
-    #shared {
-      outline: none;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>cyber Anarchy</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    color: #000;
+    font-family: monospace;
+  }
+  h1 {
+    font-size: 1rem;
+    font-weight: normal;
+    margin: 0 0 8px;
+  }
+  textarea {
+    width: 100%;
+    max-width: 600px;
+    height: 300px;
+    font-family: monospace;
+    font-size: 1rem;
+    display: block;
+  }
+  button {
+    font-family: monospace;
+    margin-top: 8px;
+  }
+  #status {
+    font-size: 0.8rem;
+  }
+</style>
 </head>
-
 <body>
-  <h1>no rules, total freedom!!11!</h1>
+  <h1>cyber anarchy</h1>
+  <p>shared plain-text page. anyone can edit and save over it.</p>
 
-  <div id="shared" contenteditable="true">
-      change this
-  </div>
-
-  <button id="saveButton">Save for everyone</button>
+  <textarea id="shared" spellcheck="false"></textarea>
+  <button id="saveButton">save for everyone</button>
   <span id="status"></span>
 
   <script type="module">
-    import { initializeApp } from
-      "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
     import {
-      getFirestore,
-      doc,
-      setDoc,
-      onSnapshot
-    } from
-      "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+      getFirestore, doc, setDoc, onSnapshot
+    } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
-
-    // Replace these values with your Firebase configuration.
     const firebaseConfig = {
-
       apiKey: "AIzaSyCsEMjq8Z1tDgwwyfLJ1S0julbcDtHgjSY",
-
       authDomain: "total-anarchy.firebaseapp.com",
-
       projectId: "total-anarchy",
-
       storageBucket: "total-anarchy.firebasestorage.app",
-
       messagingSenderId: "774274833340",
-
       appId: "1:774274833340:web:a8782941bd5ba9b334a9b9",
-
       measurementId: "G-6JC8ZGEPJN"
-
     };
 
-
-    // Start Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-
-    // This is the shared database document.
-    // Every visitor edits this same document.
-    const sharedPage = doc(db, "experiment", "main");
-
+    const sharedPage = doc(db, "public", "main");
 
     const editor = document.querySelector("#shared");
     const saveButton = document.querySelector("#saveButton");
     const status = document.querySelector("#status");
 
-
-    // Load updates made by other people.
     onSnapshot(
       sharedPage,
-
       snapshot => {
         if (!snapshot.exists()) {
-          status.textContent = "No saved version yet.";
+          status.textContent = "no saved version yet.";
           return;
         }
-
-        // Do not replace the text while this person is typing.
-        if (document.activeElement === editor) {
-          return;
-        }
-
-        editor.innerHTML = snapshot.data().html || "";
-        status.textContent = "Loaded shared version.";
+        if (document.activeElement === editor) return;
+        // plain text only, never parsed as HTML/JS
+        editor.value = snapshot.data().text || "";
+        status.textContent = "loaded shared version.";
       },
-
       error => {
         console.error(error);
-        status.textContent = "Could not connect to database.";
+        status.textContent = "could not connect to database.";
       }
     );
 
-
-    // Save only when the button is clicked.
     saveButton.addEventListener("click", async () => {
       try {
         saveButton.disabled = true;
-        status.textContent = "Saving...";
-
+        status.textContent = "saving...";
         await setDoc(sharedPage, {
-          html: editor.innerHTML,
+          text: editor.value.slice(0, 5000),
           changedAt: Date.now()
         });
-
-        status.textContent = "Saved for everyone.";
+        status.textContent = "saved for everyone.";
       } catch (error) {
         console.error(error);
-        status.textContent = "Save failed.";
+        status.textContent = "save failed.";
       } finally {
         saveButton.disabled = false;
       }
