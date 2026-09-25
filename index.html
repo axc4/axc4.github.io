@@ -26,28 +26,69 @@
     font-family: monospace;
     font-size: 1rem;
     display: block;
+    transition: background-color 0.3s ease;
+  }
+  textarea.flash {
+    background-color: #ffff99;
   }
   button {
     font-family: monospace;
     margin-top: 8px;
   }
-  #status {
+  #status, #meta, #counter {
     font-size: 0.8rem;
+    display: block;
+    margin-top: 4px;
+  }
+  #history {
+    margin-top: 16px;
+    max-width: 600px;
+  }
+  #history h2 {
+    font-size: 0.85rem;
+    font-weight: normal;
+    margin: 0 0 4px;
+  }
+  #history ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.75rem;
+  }
+  #history li {
+    border-top: 1px solid #ccc;
+    padding: 4px 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  #history button {
+    margin: 0;
+    font-size: 0.7rem;
   }
 </style>
 </head>
 <body>
   <h1>cyber anarchy</h1>
-  <p>shared plain-text page. anyone can edit and save over it.</p>
+  <p>shared plain-text page. anyone can edit and save over it. autosaves 2s after you stop typing.</p>
 
-  <textarea id="shared" spellcheck="false"></textarea>
+  <textarea id="shared" spellcheck="false" maxlength="5000"></textarea>
+  <span id="counter">0 / 5000</span>
   <button id="saveButton">save for everyone</button>
   <span id="status"></span>
+  <span id="meta"></span>
+  <span id="viewers">— viewers online</span>
+
+  <div id="history">
+    <h2>recent versions</h2>
+    <ul id="historyList"></ul>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
     import {
-      getFirestore, doc, setDoc, onSnapshot
+      getFirestore, doc, setDoc, deleteDoc, onSnapshot,
+      collection, addDoc, query, orderBy, limit, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -63,11 +104,51 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const sharedPage = doc(db, "public", "main");
+    const historyCol = collection(db, "public", "main", "history");
+    const presenceCol = collection(db, "presence", "main", "sessions");
 
     const editor = document.querySelector("#shared");
+    const counter = document.querySelector("#counter");
     const saveButton = document.querySelector("#saveButton");
     const status = document.querySelector("#status");
+    const meta = document.querySelector("#meta");
+    const viewers = document.querySelector("#viewers");
+    const historyList = document.querySelector("#historyList");
 
+    // --- identity: random per-session name, not tied to any account ---
+    const adjectives = ["swift","neon","feral","quiet","wired","broken","idle","loud"];
+    const nouns = ["fox","ghost","signal","drifter","node","echo","raven","glitch"];
+    const myName = adjectives[Math.floor(Math.random()*adjectives.length)] + "-" +
+                   nouns[Math.floor(Math.random()*nouns.length)] + "-" +
+                   Math.floor(Math.random()*100);
+    const sessionId = myName + "-" + Date.now();
+
+    // --- basic word filter (customize this list as needed) ---
+    const blockedWords = ["exampleslur1", "exampleslur2"];
+    function containsBlocked(text) {
+      const lower = text.toLowerCase();
+      return blockedWords.some(w => lower.includes(w));
+    }
+
+    // --- char counter ---
+    function updateCounter() {
+      counter.textContent = `${editor.value.length} / 5000`;
+    }
+    editor.addEventListener("input", updateCounter);
+    updateCounter();
+
+    // --- rate limit ---
+    let lastSaveAt = 0;
+    const MIN_SAVE_INTERVAL_MS = 3000;
+
+    // --- diff flash on incoming remote update ---
+    let lastKnownText = "";
+    function flashTextarea() {
+      editor.classList.add("flash");
+      setTimeout(() => editor.classList.remove("flash"), 400);
+    }
+
+    // --- load + live updates ---
     onSnapshot(
       sharedPage,
       snapshot => {
@@ -75,10 +156,19 @@
           status.textContent = "no saved version yet.";
           return;
         }
-        if (document.activeElement === editor) return;
-        // plain text only, never parsed as HTML/JS
-        editor.value = snapshot.data().text || "";
+        const data = snapshot.data();
+        const incomingText = data.text || "";
+        if (document.activeElement !== editor && incomingText !== editor.value) {
+          editor.value = incomingText;
+          updateCounter();
+          if (incomingText !== lastKnownText) flashTextarea();
+        }
+        lastKnownText = incomingText;
         status.textContent = "loaded shared version.";
+        if (data.editor && data.changedAt) {
+          const when = new Date(data.changedAt).toLocaleTimeString();
+          meta.textContent = `last edited by ${data.editor} at ${when}`;
+        }
       },
       error => {
         console.error(error);
@@ -86,21 +176,96 @@
       }
     );
 
-    saveButton.addEventListener("click", async () => {
+    // --- edit history (last 5) ---
+    const historyQuery = query(historyCol, orderBy("changedAt", "desc"), limit(5));
+    onSnapshot(historyQuery, snapshot => {
+      historyList.innerHTML = "";
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        const li = document.createElement("li");
+        const label = document.createElement("span");
+        label.textContent = `${d.editor || "unknown"} — ${new Date(d.changedAt).toLocaleTimeString()}`;
+        const revertBtn = document.createElement("button");
+        revertBtn.textContent = "revert";
+        revertBtn.addEventListener("click", async () => {
+          if (containsBlocked(d.text || "")) return; // safety: don't revert to filtered content either
+          await doSave(d.text || "", true);
+        });
+        li.appendChild(label);
+        li.appendChild(revertBtn);
+        historyList.appendChild(li);
+      });
+    }, error => console.error(error));
+
+    // --- presence (live viewer count) ---
+    const myPresenceDoc = doc(presenceCol, sessionId);
+    async function heartbeat() {
+      try {
+        await setDoc(myPresenceDoc, { lastSeen: Date.now(), name: myName });
+      } catch (e) { console.error(e); }
+    }
+    heartbeat();
+    const heartbeatInterval = setInterval(heartbeat, 15000);
+    window.addEventListener("beforeunload", () => {
+      deleteDoc(myPresenceDoc).catch(() => {});
+    });
+
+    onSnapshot(presenceCol, snapshot => {
+      const now = Date.now();
+      let active = 0;
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d.lastSeen && now - d.lastSeen < 40000) active++;
+      });
+      viewers.textContent = `${active} viewer${active === 1 ? "" : "s"} online`;
+    }, error => console.error(error));
+
+    // --- save logic (shared by button + autosave + revert) ---
+    async function doSave(text, isRevert = false) {
+      const now = Date.now();
+      if (!isRevert && now - lastSaveAt < MIN_SAVE_INTERVAL_MS) {
+        status.textContent = "slow down — saving too fast.";
+        return;
+      }
+      if (containsBlocked(text)) {
+        status.textContent = "blocked: message contains disallowed content.";
+        return;
+      }
       try {
         saveButton.disabled = true;
         status.textContent = "saving...";
+        const trimmed = text.slice(0, 5000);
         await setDoc(sharedPage, {
-          text: editor.value.slice(0, 5000),
-          changedAt: Date.now()
+          text: trimmed,
+          changedAt: now,
+          editor: myName
         });
-        status.textContent = "saved for everyone.";
+        await addDoc(historyCol, {
+          text: trimmed,
+          changedAt: now,
+          editor: myName
+        });
+        lastSaveAt = now;
+        status.textContent = isRevert ? "reverted." : "saved for everyone.";
+        if (isRevert) {
+          editor.value = trimmed;
+          updateCounter();
+        }
       } catch (error) {
         console.error(error);
         status.textContent = "save failed.";
       } finally {
         saveButton.disabled = false;
       }
+    }
+
+    saveButton.addEventListener("click", () => doSave(editor.value));
+
+    // --- autosave: 2s after typing stops ---
+    let autosaveTimer = null;
+    editor.addEventListener("input", () => {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(() => doSave(editor.value), 2000);
     });
   </script>
 </body>
