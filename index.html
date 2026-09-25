@@ -40,32 +40,6 @@
     display: block;
     margin-top: 4px;
   }
-  #history {
-    margin-top: 16px;
-    max-width: 600px;
-  }
-  #history h2 {
-    font-size: 0.85rem;
-    font-weight: normal;
-    margin: 0 0 4px;
-  }
-  #history ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    font-size: 0.75rem;
-  }
-  #history li {
-    border-top: 1px solid #ccc;
-    padding: 4px 0;
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  #history button {
-    margin: 0;
-    font-size: 0.7rem;
-  }
 </style>
 </head>
 <body>
@@ -77,18 +51,11 @@
   <button id="saveButton">save for everyone</button>
   <span id="status"></span>
   <span id="meta"></span>
-  <span id="viewers">— viewers online</span>
-
-  <div id="history">
-    <h2>recent versions</h2>
-    <ul id="historyList"></ul>
-  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
     import {
-      getFirestore, doc, setDoc, deleteDoc, onSnapshot,
-      collection, addDoc, query, orderBy, limit, serverTimestamp
+      getFirestore, doc, setDoc, onSnapshot
     } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -104,16 +71,12 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const sharedPage = doc(db, "public", "main");
-    const historyCol = collection(db, "public", "main", "history");
-    const presenceCol = collection(db, "presence", "main", "sessions");
 
     const editor = document.querySelector("#shared");
     const counter = document.querySelector("#counter");
     const saveButton = document.querySelector("#saveButton");
     const status = document.querySelector("#status");
     const meta = document.querySelector("#meta");
-    const viewers = document.querySelector("#viewers");
-    const historyList = document.querySelector("#historyList");
 
     // --- identity: random per-session name, not tied to any account ---
     const adjectives = ["swift","neon","feral","quiet","wired","broken","idle","loud"];
@@ -121,7 +84,6 @@
     const myName = adjectives[Math.floor(Math.random()*adjectives.length)] + "-" +
                    nouns[Math.floor(Math.random()*nouns.length)] + "-" +
                    Math.floor(Math.random()*100);
-    const sessionId = myName + "-" + Date.now();
 
     // --- basic word filter (customize this list as needed) ---
     const blockedWords = ["exampleslur1", "exampleslur2"];
@@ -176,54 +138,10 @@
       }
     );
 
-    // --- edit history (last 5) ---
-    const historyQuery = query(historyCol, orderBy("changedAt", "desc"), limit(5));
-    onSnapshot(historyQuery, snapshot => {
-      historyList.innerHTML = "";
-      snapshot.forEach(docSnap => {
-        const d = docSnap.data();
-        const li = document.createElement("li");
-        const label = document.createElement("span");
-        label.textContent = `${d.editor || "unknown"} — ${new Date(d.changedAt).toLocaleTimeString()}`;
-        const revertBtn = document.createElement("button");
-        revertBtn.textContent = "revert";
-        revertBtn.addEventListener("click", async () => {
-          if (containsBlocked(d.text || "")) return; // safety: don't revert to filtered content either
-          await doSave(d.text || "", true);
-        });
-        li.appendChild(label);
-        li.appendChild(revertBtn);
-        historyList.appendChild(li);
-      });
-    }, error => console.error(error));
-
-    // --- presence (live viewer count) ---
-    const myPresenceDoc = doc(presenceCol, sessionId);
-    async function heartbeat() {
-      try {
-        await setDoc(myPresenceDoc, { lastSeen: Date.now(), name: myName });
-      } catch (e) { console.error(e); }
-    }
-    heartbeat();
-    const heartbeatInterval = setInterval(heartbeat, 15000);
-    window.addEventListener("beforeunload", () => {
-      deleteDoc(myPresenceDoc).catch(() => {});
-    });
-
-    onSnapshot(presenceCol, snapshot => {
+    // --- save logic (shared by button + autosave) ---
+    async function doSave(text) {
       const now = Date.now();
-      let active = 0;
-      snapshot.forEach(docSnap => {
-        const d = docSnap.data();
-        if (d.lastSeen && now - d.lastSeen < 40000) active++;
-      });
-      viewers.textContent = `${active} viewer${active === 1 ? "" : "s"} online`;
-    }, error => console.error(error));
-
-    // --- save logic (shared by button + autosave + revert) ---
-    async function doSave(text, isRevert = false) {
-      const now = Date.now();
-      if (!isRevert && now - lastSaveAt < MIN_SAVE_INTERVAL_MS) {
+      if (now - lastSaveAt < MIN_SAVE_INTERVAL_MS) {
         status.textContent = "slow down — saving too fast.";
         return;
       }
@@ -240,17 +158,8 @@
           changedAt: now,
           editor: myName
         });
-        await addDoc(historyCol, {
-          text: trimmed,
-          changedAt: now,
-          editor: myName
-        });
         lastSaveAt = now;
-        status.textContent = isRevert ? "reverted." : "saved for everyone.";
-        if (isRevert) {
-          editor.value = trimmed;
-          updateCounter();
-        }
+        status.textContent = "saved for everyone.";
       } catch (error) {
         console.error(error);
         status.textContent = "save failed.";
