@@ -88,12 +88,109 @@
     margin-top: 4px;
     color: var(--muted);
   }
+
+  #announcement {
+    width: 100%;
+    max-width: 600px;
+    border: 1px solid var(--fg);
+    padding: 8px 12px;
+    margin-top: 16px;
+    text-align: left;
+    display: none;
+  }
+  #announcement .label {
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  #polls {
+    width: 100%;
+    max-width: 600px;
+    margin-top: 20px;
+    text-align: left;
+  }
+  .poll {
+    border: 1px solid var(--fg);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .poll .question { font-weight: bold; margin-bottom: 6px; }
+  .poll .option {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--muted);
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: monospace;
+    width: 100%;
+    text-align: left;
+    font-size: 0.9rem;
+  }
+  .poll .option:hover { border-color: var(--fg); }
+  .poll .option.voted { border-color: var(--fg); font-weight: bold; }
+  .poll .adminRow { margin-top: 6px; }
+  .poll .adminRow button { font-size: 0.7rem; margin-top: 0; }
+
+  #adminArea {
+    width: 100%;
+    max-width: 600px;
+    margin-top: 24px;
+    border-top: 1px dashed var(--muted);
+    padding-top: 12px;
+  }
+  #adminToggle {
+    font-size: 0.7rem;
+    background: none;
+    border: none;
+    color: var(--muted);
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+  }
+  #adminLogin, #adminPanel {
+    display: none;
+    text-align: left;
+    margin-top: 8px;
+  }
+  #adminLogin input, #adminPanel input, #adminPanel textarea {
+    display: block;
+    width: 100%;
+    font-family: monospace;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--fg);
+    padding: 4px 6px;
+    margin-bottom: 6px;
+    box-sizing: border-box;
+  }
+  #adminPanel h3 { font-size: 0.85rem; margin: 12px 0 4px; }
+  #adminStatus { font-size: 0.75rem; color: var(--muted); }
+  #announcementHistory { margin-top: 6px; }
+  .announcementItem {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--muted);
+    padding: 4px 8px;
+    margin-bottom: 4px;
+    font-size: 0.8rem;
+  }
+  .announcementItem .text { flex: 1; word-break: break-word; }
+  .announcementItem button { margin-top: 0; font-size: 0.7rem; padding: 2px 6px; }
 </style>
 </head>
 <body>
   <div class="topRow">
     <button id="themeToggle">dark mode</button>
   </div>
+
   <div class="wrap">
     <h1>cyber anarchy</h1>
     <p>shared plain-text page. anyone can edit, delete, or replace anything. autosaves 2s after you stop typing.</p>
@@ -103,6 +200,44 @@
     <button id="saveButton">save for everyone</button>
     <span id="status"></span>
     <span id="meta"></span>
+  </div>
+
+  <div id="announcement">
+    <div class="label">announcement</div>
+    <div id="announcementText"></div>
+  </div>
+
+  <div id="polls">
+    <div id="pollsList"></div>
+  </div>
+
+  <div id="adminArea">
+    <button id="adminToggle">admin</button>
+
+    <div id="adminLogin">
+      <input id="adminEmail" type="email" placeholder="email" autocomplete="username">
+      <input id="adminPassword" type="password" placeholder="password" autocomplete="current-password">
+      <button id="adminLoginButton">log in</button>
+      <span id="adminStatus"></span>
+    </div>
+
+    <div id="adminPanel">
+      <span id="adminStatus2" style="color: var(--muted); font-size: 0.75rem;"></span>
+      <button id="adminLogoutButton">log out</button>
+
+      <h3>post an announcement</h3>
+      <textarea id="announcementInput" rows="2" placeholder="announcement text..."></textarea>
+      <button id="announcementPostButton">post announcement</button>
+      <div id="announcementHistory"></div>
+
+      <h3>create a poll</h3>
+      <input id="pollQuestion" placeholder="poll question">
+      <input id="pollOption1" placeholder="option 1">
+      <input id="pollOption2" placeholder="option 2">
+      <input id="pollOption3" placeholder="option 3 (optional)">
+      <input id="pollOption4" placeholder="option 4 (optional)">
+      <button id="pollCreateButton">create poll</button>
+    </div>
   </div>
 
   <script>
@@ -134,8 +269,12 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
     import {
-      getFirestore, doc, setDoc, onSnapshot
+      getFirestore, doc, setDoc, addDoc, deleteDoc, onSnapshot,
+      collection, query, orderBy, limit
     } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-firestore.js";
+    import {
+      getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+    } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCsEMjq8Z1tDgwwyfLJ1S0julbcDtHgjSY",
@@ -149,6 +288,7 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
     const sharedPage = doc(db, "public", "main");
 
     const editor = document.querySelector("#shared");
@@ -226,6 +366,267 @@
     editor.addEventListener("input", () => {
       clearTimeout(autosaveTimer);
       autosaveTimer = setTimeout(() => doSave(editor.value), 2000);
+    });
+
+    // ============ announcements (public read, admin-only write) ============
+    const announcementBox = document.querySelector("#announcement");
+    const announcementText = document.querySelector("#announcementText");
+
+    const latestAnnouncementQuery = query(
+      collection(db, "announcements"),
+      orderBy("postedAt", "desc"),
+      limit(1)
+    );
+    onSnapshot(latestAnnouncementQuery, snapshot => {
+      if (snapshot.empty) {
+        announcementBox.style.display = "none";
+        return;
+      }
+      const data = snapshot.docs[0].data();
+      announcementText.textContent = data.text || "";
+      announcementBox.style.display = "block";
+    }, error => console.error("announcements:", error));
+
+    // ============ polls (public read + vote, admin-only create/close) ============
+    const pollsList = document.querySelector("#pollsList");
+
+    // per-browser voter id, so "one vote per browser" -- not identity-verified,
+    // consistent with everything else here being open/anarchic
+    let voterId = null;
+    try {
+      voterId = localStorage.getItem("cyberAnarchyVoterId");
+      if (!voterId) {
+        voterId = "voter-" + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem("cyberAnarchyVoterId", voterId);
+      }
+    } catch (e) {
+      voterId = "voter-" + Math.random().toString(36).slice(2, 10);
+    }
+
+    let isAdmin = false; // updated by onAuthStateChanged below
+
+    const pollsQuery = query(collection(db, "polls"), orderBy("createdAt", "desc"));
+    onSnapshot(pollsQuery, snapshot => {
+      pollsList.innerHTML = "";
+      snapshot.forEach(pollDoc => {
+        renderPoll(pollDoc.id, pollDoc.data());
+      });
+    }, error => console.error("polls:", error));
+
+    function renderPoll(pollId, poll) {
+      const div = document.createElement("div");
+      div.className = "poll";
+
+      const q = document.createElement("div");
+      q.className = "question";
+      q.textContent = poll.question || "";
+      div.appendChild(q);
+
+      // tally votes live
+      const votesQuery = collection(db, "polls", pollId, "votes");
+      onSnapshot(votesQuery, votesSnap => {
+        const counts = new Array((poll.options || []).length).fill(0);
+        let myVote = null;
+        votesSnap.forEach(v => {
+          const data = v.data();
+          if (typeof data.optionIndex === "number" && counts[data.optionIndex] !== undefined) {
+            counts[data.optionIndex]++;
+          }
+          if (v.id === voterId) myVote = data.optionIndex;
+        });
+
+        const optionsWrap = div.querySelector(".optionsWrap") || document.createElement("div");
+        optionsWrap.className = "optionsWrap";
+        optionsWrap.innerHTML = "";
+
+        (poll.options || []).forEach((optText, i) => {
+          const btn = document.createElement("button");
+          btn.className = "option" + (myVote === i ? " voted" : "");
+          const label = document.createElement("span");
+          label.textContent = optText;
+          const count = document.createElement("span");
+          count.textContent = counts[i];
+          btn.appendChild(label);
+          btn.appendChild(count);
+          btn.addEventListener("click", async () => {
+            try {
+              await setDoc(doc(db, "polls", pollId, "votes", voterId), {
+                optionIndex: i,
+                votedAt: Date.now()
+              });
+            } catch (e) {
+              console.error("vote failed:", e);
+            }
+          });
+          optionsWrap.appendChild(btn);
+        });
+
+        if (!div.contains(optionsWrap)) div.appendChild(optionsWrap);
+      }, error => console.error("votes:", error));
+
+      if (isAdmin) {
+        const adminRow = document.createElement("div");
+        adminRow.className = "adminRow";
+        const closeBtn = document.createElement("button");
+        closeBtn.textContent = "delete poll";
+        closeBtn.addEventListener("click", async () => {
+          try {
+            await deleteDoc(doc(db, "polls", pollId));
+          } catch (e) {
+            console.error("delete poll failed:", e);
+          }
+        });
+        adminRow.appendChild(closeBtn);
+        div.appendChild(adminRow);
+      }
+
+      pollsList.appendChild(div);
+    }
+
+    // ============ admin auth + panel ============
+    const adminToggle = document.querySelector("#adminToggle");
+    const adminLogin = document.querySelector("#adminLogin");
+    const adminPanel = document.querySelector("#adminPanel");
+    const adminEmail = document.querySelector("#adminEmail");
+    const adminPassword = document.querySelector("#adminPassword");
+    const adminLoginButton = document.querySelector("#adminLoginButton");
+    const adminLogoutButton = document.querySelector("#adminLogoutButton");
+    const adminStatus = document.querySelector("#adminStatus");
+    const adminStatus2 = document.querySelector("#adminStatus2");
+
+    adminToggle.addEventListener("click", () => {
+      const showing = adminLogin.style.display === "block" || adminPanel.style.display === "block";
+      adminLogin.style.display = showing ? "none" : (auth.currentUser ? "none" : "block");
+      adminPanel.style.display = showing ? "none" : (auth.currentUser ? "block" : "none");
+    });
+
+    adminLoginButton.addEventListener("click", async () => {
+      adminStatus.textContent = "logging in...";
+      try {
+        await signInWithEmailAndPassword(auth, adminEmail.value, adminPassword.value);
+        adminStatus.textContent = "";
+        adminPassword.value = "";
+      } catch (e) {
+        console.error(e);
+        adminStatus.textContent = "login failed.";
+      }
+    });
+
+    adminLogoutButton.addEventListener("click", () => {
+      signOut(auth);
+    });
+
+    // this only controls what the UI *shows* -- actual write permission is
+    // enforced server-side by the Firestore rules checking request.auth.uid
+    let announcementHistoryUnsub = null;
+    const announcementHistory = document.querySelector("#announcementHistory");
+
+    onAuthStateChanged(auth, user => {
+      isAdmin = !!user;
+      if (user) {
+        adminLogin.style.display = "none";
+        adminPanel.style.display = "block";
+        adminStatus2.textContent = `logged in as ${user.email}`;
+
+        if (!announcementHistoryUnsub) {
+          const historyQuery = query(
+            collection(db, "announcements"),
+            orderBy("postedAt", "desc"),
+            limit(10)
+          );
+          announcementHistoryUnsub = onSnapshot(historyQuery, snapshot => {
+            announcementHistory.innerHTML = "";
+            snapshot.forEach(annDoc => {
+              const data = annDoc.data();
+              const row = document.createElement("div");
+              row.className = "announcementItem";
+              const span = document.createElement("span");
+              span.className = "text";
+              span.textContent = data.text || "";
+              const delBtn = document.createElement("button");
+              delBtn.textContent = "delete";
+              delBtn.addEventListener("click", async () => {
+                try {
+                  await deleteDoc(doc(db, "announcements", annDoc.id));
+                } catch (e) {
+                  console.error("delete announcement failed:", e);
+                  alert("Failed to delete -- check console.");
+                }
+              });
+              row.appendChild(span);
+              row.appendChild(delBtn);
+              announcementHistory.appendChild(row);
+            });
+          }, error => console.error("announcement history:", error));
+        }
+      } else {
+        adminPanel.style.display = "none";
+        if (announcementHistoryUnsub) {
+          announcementHistoryUnsub();
+          announcementHistoryUnsub = null;
+          announcementHistory.innerHTML = "";
+        }
+      }
+    });
+
+    // ---- post announcement ----
+    const announcementInput = document.querySelector("#announcementInput");
+    const announcementPostButton = document.querySelector("#announcementPostButton");
+    announcementPostButton.addEventListener("click", async () => {
+      const text = announcementInput.value.trim();
+      if (!text) return;
+      try {
+        announcementPostButton.disabled = true;
+        await addDoc(collection(db, "announcements"), {
+          text: text.slice(0, 500),
+          postedAt: Date.now(),
+          postedBy: auth.currentUser ? auth.currentUser.email : "admin"
+        });
+        announcementInput.value = "";
+      } catch (e) {
+        console.error("announcement post failed:", e);
+        alert("Failed to post announcement -- check console.");
+      } finally {
+        announcementPostButton.disabled = false;
+      }
+    });
+
+    // ---- create poll ----
+    const pollQuestion = document.querySelector("#pollQuestion");
+    const pollOptionInputs = [
+      document.querySelector("#pollOption1"),
+      document.querySelector("#pollOption2"),
+      document.querySelector("#pollOption3"),
+      document.querySelector("#pollOption4")
+    ];
+    const pollCreateButton = document.querySelector("#pollCreateButton");
+    pollCreateButton.addEventListener("click", async () => {
+      const question = pollQuestion.value.trim();
+      const options = pollOptionInputs
+        .map(inp => inp.value.trim())
+        .filter(v => v.length > 0);
+
+      if (!question || options.length < 2) {
+        alert("Need a question and at least 2 options.");
+        return;
+      }
+
+      try {
+        pollCreateButton.disabled = true;
+        await addDoc(collection(db, "polls"), {
+          question: question.slice(0, 300),
+          options,
+          createdAt: Date.now(),
+          createdBy: auth.currentUser ? auth.currentUser.email : "admin"
+        });
+        pollQuestion.value = "";
+        pollOptionInputs.forEach(inp => inp.value = "");
+      } catch (e) {
+        console.error("poll creation failed:", e);
+        alert("Failed to create poll -- check console.");
+      } finally {
+        pollCreateButton.disabled = false;
+      }
     });
   </script>
 </body>
