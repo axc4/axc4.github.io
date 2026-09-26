@@ -5,14 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>cyber Anarchy</title>
 <style>
+  :root {
+    --bg: #fff;
+    --fg: #000;
+    --muted: #444;
+  }
+  :root[data-theme="dark"] {
+    --bg: #000;
+    --fg: #fff;
+    --muted: #aaa;
+  }
   html, body {
     height: 100%;
     margin: 0;
   }
   body {
     min-height: 100%;
-    background: #fff;
-    color: #000;
+    background: var(--bg);
+    color: var(--fg);
     font-family: monospace;
     display: flex;
     flex-direction: column;
@@ -26,6 +36,21 @@
     max-width: 600px;
     text-align: center;
   }
+  .topRow {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 600px;
+    width: 100%;
+    margin: 0 auto 8px;
+  }
+  #themeToggle {
+    font-family: monospace;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--fg);
+    padding: 2px 8px;
+    cursor: pointer;
+  }
   h1 {
     font-size: 1rem;
     font-weight: normal;
@@ -34,6 +59,7 @@
   p {
     font-size: 0.85rem;
     margin: 0 0 12px;
+    color: var(--muted);
   }
   textarea {
     width: 100%;
@@ -43,19 +69,31 @@
     display: block;
     margin: 0 auto;
     text-align: left;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--fg);
   }
   button {
     font-family: monospace;
     margin-top: 8px;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--fg);
+    padding: 4px 10px;
+    cursor: pointer;
   }
   #status, #meta, #counter {
     font-size: 0.8rem;
     display: block;
     margin-top: 4px;
+    color: var(--muted);
   }
 </style>
 </head>
 <body>
+  <div class="topRow">
+    <button id="themeToggle">dark mode</button>
+  </div>
   <div class="wrap">
     <h1>cyber anarchy</h1>
     <p>shared plain-text page. anyone can edit, delete, or replace anything. autosaves 2s after you stop typing.</p>
@@ -66,6 +104,32 @@
     <span id="status"></span>
     <span id="meta"></span>
   </div>
+
+  <script>
+    // theme toggle: intentionally independent of the Firebase module below,
+    // so it still works even if that import fails or is slow to load.
+    (function () {
+      const toggle = document.querySelector("#themeToggle");
+
+      function applyTheme(theme) {
+        document.documentElement.setAttribute("data-theme", theme);
+        toggle.textContent = theme === "dark" ? "light mode" : "dark mode";
+      }
+
+      let currentTheme = "light";
+      try {
+        const saved = localStorage.getItem("cyberAnarchyTheme");
+        if (saved) currentTheme = saved;
+      } catch (e) {}
+      applyTheme(currentTheme);
+
+      toggle.addEventListener("click", () => {
+        currentTheme = currentTheme === "dark" ? "light" : "dark";
+        applyTheme(currentTheme);
+        try { localStorage.setItem("cyberAnarchyTheme", currentTheme); } catch (e) {}
+      });
+    })();
+  </script>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
