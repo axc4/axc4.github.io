@@ -6,30 +6,43 @@
 <title>cyber Anarchy</title>
 <style>
   html, body {
+    height: 100%;
     margin: 0;
-    padding: 16px;
-    padding-top: max(16px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  body {
+    min-height: 100%;
     background: #fff;
     color: #000;
     font-family: monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+  }
+  .wrap {
+    width: 100%;
+    max-width: 600px;
+    text-align: center;
   }
   h1 {
     font-size: 1rem;
     font-weight: normal;
-    margin: 0 0 8px;
+    margin: 0 0 4px;
+  }
+  p {
+    font-size: 0.85rem;
+    margin: 0 0 12px;
   }
   textarea {
     width: 100%;
-    max-width: 600px;
     height: 300px;
     font-family: monospace;
     font-size: 1rem;
     display: block;
-    transition: background-color 0.3s ease;
-  }
-  textarea.flash {
-    background-color: #ffff99;
+    margin: 0 auto;
+    text-align: left;
   }
   button {
     font-family: monospace;
@@ -43,14 +56,16 @@
 </style>
 </head>
 <body>
-  <h1>cyber anarchy</h1>
-  <p>shared plain-text page. anyone can edit and save over it. autosaves 2s after you stop typing.</p>
+  <div class="wrap">
+    <h1>cyber anarchy</h1>
+    <p>shared plain-text page. anyone can edit, delete, or replace anything. autosaves 2s after you stop typing.</p>
 
-  <textarea id="shared" spellcheck="false" maxlength="5000"></textarea>
-  <span id="counter">0 / 5000</span>
-  <button id="saveButton">save for everyone</button>
-  <span id="status"></span>
-  <span id="meta"></span>
+    <textarea id="shared" spellcheck="false" maxlength="5000"></textarea>
+    <span id="counter">0 / 5000</span>
+    <button id="saveButton">save for everyone</button>
+    <span id="status"></span>
+    <span id="meta"></span>
+  </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
@@ -78,39 +93,18 @@
     const status = document.querySelector("#status");
     const meta = document.querySelector("#meta");
 
-    // --- identity: random per-session name, not tied to any account ---
-    const adjectives = ["swift","neon","feral","quiet","wired","broken","idle","loud"];
-    const nouns = ["fox","ghost","signal","drifter","node","echo","raven","glitch"];
-    const myName = adjectives[Math.floor(Math.random()*adjectives.length)] + "-" +
-                   nouns[Math.floor(Math.random()*nouns.length)] + "-" +
-                   Math.floor(Math.random()*100);
+    let myName = "anon-" + Math.floor(Math.random() * 10000);
+    try {
+      const saved = localStorage.getItem("cyberAnarchyNick");
+      if (saved) myName = saved;
+    } catch (e) {}
 
-    // --- basic word filter (customize this list as needed) ---
-    const blockedWords = ["exampleslur1", "exampleslur2"];
-    function containsBlocked(text) {
-      const lower = text.toLowerCase();
-      return blockedWords.some(w => lower.includes(w));
-    }
-
-    // --- char counter ---
     function updateCounter() {
       counter.textContent = `${editor.value.length} / 5000`;
     }
     editor.addEventListener("input", updateCounter);
     updateCounter();
 
-    // --- rate limit ---
-    let lastSaveAt = 0;
-    const MIN_SAVE_INTERVAL_MS = 3000;
-
-    // --- diff flash on incoming remote update ---
-    let lastKnownText = "";
-    function flashTextarea() {
-      editor.classList.add("flash");
-      setTimeout(() => editor.classList.remove("flash"), 400);
-    }
-
-    // --- load + live updates ---
     onSnapshot(
       sharedPage,
       snapshot => {
@@ -123,13 +117,10 @@
         if (document.activeElement !== editor && incomingText !== editor.value) {
           editor.value = incomingText;
           updateCounter();
-          if (incomingText !== lastKnownText) flashTextarea();
         }
-        lastKnownText = incomingText;
         status.textContent = "loaded shared version.";
         if (data.editor && data.changedAt) {
-          const when = new Date(data.changedAt).toLocaleTimeString();
-          meta.textContent = `last edited by ${data.editor} at ${when}`;
+          meta.textContent = `last touched by ${data.editor} at ${new Date(data.changedAt).toLocaleTimeString()}`;
         }
       },
       error => {
@@ -138,23 +129,20 @@
       }
     );
 
-    // --- save logic (shared by button + autosave) ---
+    let lastSaveAt = 0;
+    const MIN_SAVE_INTERVAL_MS = 2000;
+
     async function doSave(text) {
       const now = Date.now();
       if (now - lastSaveAt < MIN_SAVE_INTERVAL_MS) {
         status.textContent = "slow down — saving too fast.";
         return;
       }
-      if (containsBlocked(text)) {
-        status.textContent = "blocked: message contains disallowed content.";
-        return;
-      }
       try {
         saveButton.disabled = true;
         status.textContent = "saving...";
-        const trimmed = text.slice(0, 5000);
         await setDoc(sharedPage, {
-          text: trimmed,
+          text: text.slice(0, 5000),
           changedAt: now,
           editor: myName
         });
@@ -170,7 +158,6 @@
 
     saveButton.addEventListener("click", () => doSave(editor.value));
 
-    // --- autosave: 2s after typing stops ---
     let autosaveTimer = null;
     editor.addEventListener("input", () => {
       clearTimeout(autosaveTimer);
