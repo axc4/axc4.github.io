@@ -1,3 +1,3 @@
 # cyber anarchism experiment
 
-ignore the commit names please😭😭
+ignore the commits please😭😭
